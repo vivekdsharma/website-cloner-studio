@@ -33,7 +33,7 @@ function normalizeUrl(rawUrl) {
   }
 }
 
-// Declarative Shadow DOM Serializer that preserves web components and styling
+// True Declarative Shadow DOM Serializer
 async function extractFullDOMIncludingShadow(page) {
   return await page.evaluate(() => {
     function serializeNode(node) {
@@ -43,7 +43,6 @@ async function extractFullDOMIncludingShadow(page) {
       if (node.nodeType !== Node.ELEMENT_NODE) return '';
 
       const tag = node.tagName.toLowerCase();
-      // Drop binary streams, but keep style & template tags
       if (['iframe', 'video', 'audio', 'noscript'].includes(tag)) {
         return '';
       }
@@ -77,11 +76,9 @@ async function extractFullDOMIncludingShadow(page) {
   });
 }
 
-// Universal Interaction Engine (Restores clickability, menus, tabs, drawers offline)
 const UNIVERSAL_INTERACTION_SCRIPT = `
 <script>
   document.addEventListener('DOMContentLoaded', () => {
-    // 1. Local Link Router
     document.querySelectorAll('a[data-local-link]').forEach(a => {
       a.addEventListener('click', (e) => {
         e.preventDefault();
@@ -95,7 +92,6 @@ const UNIVERSAL_INTERACTION_SCRIPT = `
       });
     });
 
-    // 2. ComposedPath Event Delegation
     document.addEventListener('click', (e) => {
       const path = e.composedPath ? e.composedPath() : [e.target];
       for (const el of path) {
@@ -103,7 +99,6 @@ const UNIVERSAL_INTERACTION_SCRIPT = `
         const tag = el.tagName.toLowerCase();
         if (tag === 'a') break;
 
-        // Hamburger / Sidebar Toggle
         if (el.id === 'guide-button' || (el.matches && el.matches('[aria-label*="Guide"], [aria-label*="menu" i], .navbar-toggler, .hamburger, [class*="hamburger"], [id*="hamburger"]'))) {
           e.preventDefault();
           const guide = document.querySelector('#guide, tp-yt-app-drawer, ytd-mini-guide-renderer, .sidebar, aside');
@@ -122,7 +117,6 @@ const UNIVERSAL_INTERACTION_SCRIPT = `
           return;
         }
 
-        // Tabs
         if (el.matches && el.matches('[role="tab"], .tab, [data-tab], .nav-link')) {
           const list = el.closest('[role="tablist"], .tabs, nav, ul');
           if (list) {
@@ -142,7 +136,6 @@ const UNIVERSAL_INTERACTION_SCRIPT = `
           return;
         }
 
-        // Dropdowns & Accordions
         if (el.matches && el.matches('button, summary, [aria-expanded], [data-state], [data-toggle="dropdown"], .dropdown-toggle')) {
           if (el.hasAttribute('aria-expanded')) el.setAttribute('aria-expanded', !(el.getAttribute('aria-expanded') === 'true'));
           if (el.hasAttribute('data-state')) el.setAttribute('data-state', el.getAttribute('data-state') === 'closed' ? 'open' : 'closed');
@@ -175,7 +168,6 @@ function generateMockServerScript(capturedApis, port = 4000) {
   return `const express = require('express');\nconst cors = require('cors');\nconst app = express();\napp.use(cors());\napp.use(express.json());\n${routes}\nconst PORT = process.env.PORT || ${port};\napp.listen(PORT, () => console.log('Mock Server running on http://localhost:' + PORT));`;
 }
 
-// Live Preview Endpoint for iframe
 app.get('/api/preview/:filename', (req, res) => {
   const content = livePreviewPages[req.params.filename];
   if (!content) return res.status(404).send('Preview expired or not found.');
@@ -183,9 +175,8 @@ app.get('/api/preview/:filename', (req, res) => {
   res.send(content);
 });
 
-// Crawling and Inlining Stream Pipeline
 app.get('/api/clone-stream', async (req, res) => {
-  const { url, maxPages = 3 } = req.query;
+  const { url, maxPages = 5 } = req.query;
 
   if (!url || !/^https?:\/\//i.test(url)) {
     return res.status(400).send('Valid HTTP/HTTPS URL required.');
@@ -196,7 +187,6 @@ app.get('/api/clone-stream', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
-  // Keep-alive timer to prevent Render gateway proxy drops
   const keepAlive = setInterval(() => {
     res.write(': keepalive\n\n');
   }, 7000);
@@ -208,7 +198,7 @@ app.get('/api/clone-stream', async (req, res) => {
   const queue = [url];
   const visited = new Set();
   const urlToFilenameMap = {};
-  const maxLimit = Math.min(parseInt(maxPages, 10) || 3, 5);
+  const maxLimit = Math.min(parseInt(maxPages, 10) || 5, 20); // Allows up to 20 pages
   const targetOrigin = new URL(url).origin;
 
   try {
@@ -233,7 +223,6 @@ app.get('/api/clone-stream', async (req, res) => {
     const pages = await browser.pages();
     const page = pages[0] || (await browser.newPage());
 
-    // Intercept requests: Block heavy video streams & video codecs to prevent 512MB RAM crash
     await page.setRequestInterception(true);
     page.on('request', (req) => {
       const type = req.resourceType();
@@ -290,12 +279,12 @@ app.get('/api/clone-stream', async (req, res) => {
       sendSSE(res, { status: 'info', message: `🌐 [${pageIndex + 1}/${maxLimit}] Processing: ${currentUrl}` });
 
       try {
-        await page.goto(currentUrl, { waitUntil: 'domcontentloaded', timeout: 25000 });
+        await page.goto(currentUrl, { waitUntil: 'networkidle2', timeout: 30000 });
       } catch (e) {}
 
-      await new Promise(r => setTimeout(r, 1500));
+      await new Promise(r => setTimeout(r, 1800));
 
-      // Extract script bundles for developer archive
+      // Extract script bundles for zip
       const pageScriptsInfo = await page.evaluate(() => {
         const inlines = [];
         const externals = [];
@@ -335,7 +324,7 @@ app.get('/api/clone-stream', async (req, res) => {
         } catch (e) {}
       }
 
-      // 1. EXTRACT RUNTIME COMPUTED STYLES (Crucial for portfolios & SPA CSS)
+      // Extract computed styles
       const inlineStyles = await page.evaluate(() => {
         let css = '';
         const sheets = Array.from(document.styleSheets).slice(0, 10);
@@ -348,25 +337,42 @@ app.get('/api/clone-stream', async (req, res) => {
         return css;
       });
 
-      const rawHtml = await extractFullDOMIncludingShadow(page);
+      // ROBUST LIVE-DOM LINK EXTRACTION (Traverses Shadow Roots + Light DOM directly in browser)
+      const liveDiscoveredLinks = await page.evaluate(() => {
+        const found = [];
+        function collect(root) {
+          if (!root) return;
+          const links = root.querySelectorAll('a[href]');
+          links.forEach(a => {
+            const h = a.getAttribute('href');
+            if (h && !h.startsWith('#') && !h.startsWith('javascript:')) found.push(h);
+          });
+          const allEls = root.querySelectorAll('*');
+          for (let el of allEls) {
+            if (el.shadowRoot) collect(el.shadowRoot);
+          }
+        }
+        collect(document);
+        return Array.from(new Set(found));
+      });
 
-      // Extract and filter navigation links (excluding heavy video streams)
-      const $temp = cheerio.load(rawHtml);$temp('a[href]').each((_, el) => {
-        const href = $temp(el).attr('href');
-        if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+      // Filter and queue safe links
+      for (const rawHref of liveDiscoveredLinks) {
         try {
-          const resolved = new URL(href, currentParsedUrl.href);
+          const resolved = new URL(rawHref, currentParsedUrl.href);
           if (resolved.origin === targetOrigin) {
             const p = resolved.pathname;
             if (!p.includes('/watch') && !p.includes('/shorts') && !p.includes('/live')) {
               const cleanHref = normalizeUrl(resolved.href);
-              if (!visited.has(cleanHref) && !queue.includes(cleanHref) && queue.length + visited.size < 15) {
+              if (!visited.has(cleanHref) && !queue.includes(cleanHref) && queue.length + visited.size < 40) {
                 queue.push(cleanHref);
               }
             }
           }
         } catch (e) {}
-      });
+      }
+
+      const rawHtml = await extractFullDOMIncludingShadow(page);
 
       crawledPages.push({
         fileName: filename,
@@ -376,7 +382,6 @@ app.get('/api/clone-stream', async (req, res) => {
       });
     }
 
-    // Immediately close browser to release ~300MB RAM before Cheerio parsing
     await browser.close();
     browser = null;
 
@@ -387,10 +392,9 @@ app.get('/api/clone-stream', async (req, res) => {
       const $ = cheerio.load(pageData.rawHtml);
       const parsedPageUrl = new URL(pageData.originalUrl);
 
-      // Strip original scripts and prefetch
       $('script, link[rel="preload"], link[rel="prefetch"]').remove();
 
-      // 2. INLINE EXTERNAL STYLESHEETS WITH FALLBACK RESOLUTION
+      // Inline external CSS
       const cssLinks = $('link[rel="stylesheet"]').toArray().slice(0, 8);
       for (const link of cssLinks) {
         const href = $(link).attr('href');
@@ -416,12 +420,10 @@ app.get('/api/clone-stream', async (req, res) => {
         }
       }
 
-      // 3. INJECT COMPUTED STYLES
       if (pageData.inlineStyles) {
         $('head').append(`<style>\n${pageData.inlineStyles}\n</style>`);
       }
 
-      // Convert relative media to absolute URLs
       $('img[src], source[src]').each((_, el) => {
         const src = $(el).attr('src');
         if (src && !src.startsWith('data:') && !src.startsWith('http')) {
@@ -480,7 +482,7 @@ app.get('/api/clone-stream', async (req, res) => {
   }
 });
 
-// ZIP Download Endpoint
+// ZIP Exporter
 app.post('/api/download-zip', async (req, res) => {
   const { crawledPages, html, capturedApis } = req.body;
   const pagesToBundle = (crawledPages && crawledPages.length > 0)
