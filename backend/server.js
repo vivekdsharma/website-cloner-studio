@@ -251,14 +251,16 @@ app.get('/api/clone-stream', async (req, res) => {
     sendSSE(res, { status: 'info', message: '🖥️ Launching Chromium Cloner...' });
 
 browser = await puppeteer.launch({
-  headless: 'new',
-  defaultViewport: { width: 1440, height: 900 },
+  headless: 'new', // Cloud par headless 'new' zaroori hai
+  defaultViewport: { width: 1280, height: 800 },
   args: [
     '--no-sandbox',
     '--disable-setuid-sandbox',
     '--disable-dev-shm-usage',
     '--disable-gpu',
-    '--js-flags="--max-old-space-size=4096"'
+    '--disable-software-rasterizer',
+    '--single-process', // Low memory footprint for 512MB RAM
+    '--no-zygote'
   ]
 });
 
