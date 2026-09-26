@@ -250,17 +250,17 @@ app.get('/api/clone-stream', async (req, res) => {
   try {
     sendSSE(res, { status: 'info', message: '🖥️ Launching Chromium Cloner...' });
 
-    browser = await puppeteer.launch({
-      headless: false,
-      defaultViewport: { width: 1440, height: 900 },
-      args: [
-        '--start-maximized',
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-web-security',
-        '--js-flags="--max-old-space-size=4096"'
-      ]
-    });
+browser = await puppeteer.launch({
+  headless: 'new',
+  defaultViewport: { width: 1440, height: 900 },
+  args: [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-gpu',
+    '--js-flags="--max-old-space-size=4096"'
+  ]
+});
 
     const pages = await browser.pages();
     const page = pages[0] || (await browser.newPage());
@@ -630,5 +630,5 @@ To serve captured API routes locally:
   await archive.finalize();
 });
 
-const PORT = 5000;
-app.listen(PORT, () => console.log(`Universal Engine running on http://localhost:${PORT}`));
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`Universal Engine running on port ${PORT}`));;

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
 export default function App() {
   const [url, setUrl] = useState('');
@@ -43,7 +44,7 @@ export default function App() {
     setCapturedApis([]);
     setCloning(true);
 
-    const streamUrl = `http://localhost:5000/api/clone-stream?url=${encodeURIComponent(url)}&maxPages=${maxPages}`;
+    const streamUrl = `${BACKEND_URL}/api/clone-stream?url=${encodeURIComponent(url)}&maxPages=${maxPages}`;
     const eventSource = new EventSource(streamUrl);
 
     eventSource.onmessage = (event) => {
@@ -87,7 +88,7 @@ export default function App() {
 
     try {
       const response = await axios.post(
-        'http://localhost:5000/api/download-zip',
+        '${BACKEND_URL}/api/download-zip',
         { 
           crawledPages: pagesPayload, 
           html: previewHtml,
@@ -109,7 +110,7 @@ export default function App() {
   };
 
   const activePageFileName = crawledPages[activePageIndex]?.fileName || (previewHtml ? 'index.html' : '');
-  const previewServerUrl = activePageFileName ? `http://localhost:5000/api/preview/${activePageFileName}` : '';
+  const previewServerUrl = activePageFileName ? `${BACKEND_URL}/api/preview/${activePageFileName}` : '';
 
   return (
     <div style={{ display: 'flex', height: '100vh', width: '100vw', fontFamily: 'system-ui, sans-serif', backgroundColor: '#0f172a', color: '#f8fafc', overflow: 'hidden' }}>
