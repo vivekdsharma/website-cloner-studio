@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Production builds
+dist/
+build/
+*/dist/
+
+# Environment files
+.env
+.env.local
+
+# Logs & temp files
+*.log
+npm-debug.log*
+developer-website-package.zip
+
+# OS Files
+.DS_Store
+Thumbs.db
