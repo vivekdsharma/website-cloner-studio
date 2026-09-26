@@ -186,7 +186,6 @@ app.get('/api/clone-stream', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
-  // Keep-alive timer to prevent Render reverse-proxy timeouts
   const keepAlive = setInterval(() => {
     res.write(': keepalive\n\n');
   }, 10000);
@@ -198,7 +197,7 @@ app.get('/api/clone-stream', async (req, res) => {
   const queue = [url];
   const visited = new Set();
   const urlToFilenameMap = {};
-  const maxLimit = Math.min(parseInt(maxPages, 10) || 3, 5); // Keep limits safe on free tier
+  const maxLimit = Math.min(parseInt(maxPages, 10) || 3, 5);
   const targetOrigin = new URL(url).origin;
 
   try {
@@ -268,7 +267,7 @@ app.get('/api/clone-stream', async (req, res) => {
 
       await new Promise(r => setTimeout(r, 1500));
 
-      // Extract only up to 5 main script tags to prevent memory bloat
+      // Extract inline & external scripts for the zip bundle
       const pageScriptsInfo = await page.evaluate(() => {
         const inlines = [];
         const externals = [];
@@ -308,6 +307,19 @@ app.get('/api/clone-stream', async (req, res) => {
         } catch (e) {}
       }
 
+      // Extract inline runtime styles computed by the browser
+      const inlineStyles = await page.evaluate(() => {
+        let css = '';
+        const sheets = Array.from(document.styleSheets).slice(0, 10);
+        for (const sheet of sheets) {
+          try {
+            const rules = sheet.cssRules || sheet.rules;
+            for (const rule of rules) css += rule.cssText + '\n';
+          } catch (e) {}
+        }
+        return css;
+      });
+
       const rawHtml = await extractFullDOMIncludingShadow(page);
 
       const $temp = cheerio.load(rawHtml);$temp('a[href]').each((_, el) => {
@@ -327,24 +339,56 @@ app.get('/api/clone-stream', async (req, res) => {
       crawledPages.push({
         fileName: filename,
         originalUrl: currentUrl,
-        rawHtml
+        rawHtml,
+        inlineStyles
       });
     }
 
-    // CRITICAL: Close browser immediately here to free ~300MB RAM before post-processing
     await browser.close();
     browser = null;
 
-    sendSSE(res, { status: 'info', message: `🎨 Post-processing layouts and interlinks...` });
+    sendSSE(res, { status: 'info', message: `🎨 Inlining stylesheets and rebuilding layouts...` });
 
     const processedPages = [];
     for (const pageData of crawledPages) {
       const $ = cheerio.load(pageData.rawHtml);
       const parsedPageUrl = new URL(pageData.originalUrl);
 
+      // Strip original scripts and prefetch tags
       $('script, link[rel="preload"], link[rel="prefetch"]').remove();
 
-      // Convert relative media to absolute
+      // INLINE EXTERNAL STYLESHEETS (Fixes broken portfolio/site styling)
+      const cssLinks = $('link[rel="stylesheet"]').toArray().slice(0, 8);
+      for (const link of cssLinks) {
+        const href = $(link).attr('href');
+        if (href) {
+          try {
+            const resolvedCssUrl = new URL(href, parsedPageUrl.href).href;
+            const cssRes = await axios.get(resolvedCssUrl, {
+              timeout: 4000,
+              maxContentLength: 1500000,
+              headers: { 'User-Agent': 'Mozilla/5.0' }
+            });
+            if (cssRes.data && typeof cssRes.data === 'string') {
+              $('head').append(`<style>\n${cssRes.data}\n</style>`);
+              $(link).remove();
+            } else {
+              $(link).attr('href', resolvedCssUrl);
+            }
+          } catch (e) {
+            try {
+              $(link).attr('href', new URL(href, parsedPageUrl.href).href);
+            } catch (err) {}
+          }
+        }
+      }
+
+      // Inject computed runtime styles
+      if (pageData.inlineStyles) {
+        $('head').append(`<style>\n${pageData.inlineStyles}\n</style>`);
+      }
+
+      // Convert relative media sources to absolute
       $('img[src], source[src]').each((_, el) => {
         const src = $(el).attr('src');
         if (src && !src.startsWith('data:') && !src.startsWith('http')) {
@@ -354,7 +398,7 @@ app.get('/api/clone-stream', async (req, res) => {
         }
       });
 
-      // Remap local navigation
+      // Remap internal links
       $('a[href]').each((_, el) => {
         const href = $(el).attr('href');
         if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
@@ -387,7 +431,7 @@ app.get('/api/clone-stream', async (req, res) => {
 
     sendSSE(res, {
       status: 'complete',
-      message: `🎉 All ${processedPages.length} pages ready! Collected ${sessionCapturedScripts.length} JS bundles.`,
+      message: `🎉 All ${processedPages.length} pages cloned with CSS and layouts intact!`,
       html: processedPages[0]?.html || '',
       crawledPages: processedPages,
       capturedApis
