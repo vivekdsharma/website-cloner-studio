@@ -3,11 +3,10 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  "scripts": {
-    "start": "node --max-old-space-size=4096 server.js",
-  "build": "npm install && npx puppeteer browsers install chrome",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+"scripts": {
+  "start": "node --max-old-space-size=400 server.js",
+  "build": "npm install && npx puppeteer browsers install chrome"
+},
   "keywords": [],
   "author": "",
   "license": "ISC",
