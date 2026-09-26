@@ -33,6 +33,7 @@ function normalizeUrl(rawUrl) {
   }
 }
 
+// Declarative Shadow DOM Serializer that preserves web components and styling
 async function extractFullDOMIncludingShadow(page) {
   return await page.evaluate(() => {
     function serializeNode(node) {
@@ -42,6 +43,7 @@ async function extractFullDOMIncludingShadow(page) {
       if (node.nodeType !== Node.ELEMENT_NODE) return '';
 
       const tag = node.tagName.toLowerCase();
+      // Drop binary streams, but keep style & template tags
       if (['iframe', 'video', 'audio', 'noscript'].includes(tag)) {
         return '';
       }
@@ -75,9 +77,11 @@ async function extractFullDOMIncludingShadow(page) {
   });
 }
 
+// Universal Interaction Engine (Restores clickability, menus, tabs, drawers offline)
 const UNIVERSAL_INTERACTION_SCRIPT = `
 <script>
   document.addEventListener('DOMContentLoaded', () => {
+    // 1. Local Link Router
     document.querySelectorAll('a[data-local-link]').forEach(a => {
       a.addEventListener('click', (e) => {
         e.preventDefault();
@@ -91,6 +95,7 @@ const UNIVERSAL_INTERACTION_SCRIPT = `
       });
     });
 
+    // 2. ComposedPath Event Delegation
     document.addEventListener('click', (e) => {
       const path = e.composedPath ? e.composedPath() : [e.target];
       for (const el of path) {
@@ -98,6 +103,7 @@ const UNIVERSAL_INTERACTION_SCRIPT = `
         const tag = el.tagName.toLowerCase();
         if (tag === 'a') break;
 
+        // Hamburger / Sidebar Toggle
         if (el.id === 'guide-button' || (el.matches && el.matches('[aria-label*="Guide"], [aria-label*="menu" i], .navbar-toggler, .hamburger, [class*="hamburger"], [id*="hamburger"]'))) {
           e.preventDefault();
           const guide = document.querySelector('#guide, tp-yt-app-drawer, ytd-mini-guide-renderer, .sidebar, aside');
@@ -116,6 +122,7 @@ const UNIVERSAL_INTERACTION_SCRIPT = `
           return;
         }
 
+        // Tabs
         if (el.matches && el.matches('[role="tab"], .tab, [data-tab], .nav-link')) {
           const list = el.closest('[role="tablist"], .tabs, nav, ul');
           if (list) {
@@ -135,6 +142,7 @@ const UNIVERSAL_INTERACTION_SCRIPT = `
           return;
         }
 
+        // Dropdowns & Accordions
         if (el.matches && el.matches('button, summary, [aria-expanded], [data-state], [data-toggle="dropdown"], .dropdown-toggle')) {
           if (el.hasAttribute('aria-expanded')) el.setAttribute('aria-expanded', !(el.getAttribute('aria-expanded') === 'true'));
           if (el.hasAttribute('data-state')) el.setAttribute('data-state', el.getAttribute('data-state') === 'closed' ? 'open' : 'closed');
@@ -167,6 +175,7 @@ function generateMockServerScript(capturedApis, port = 4000) {
   return `const express = require('express');\nconst cors = require('cors');\nconst app = express();\napp.use(cors());\napp.use(express.json());\n${routes}\nconst PORT = process.env.PORT || ${port};\napp.listen(PORT, () => console.log('Mock Server running on http://localhost:' + PORT));`;
 }
 
+// Live Preview Endpoint for iframe
 app.get('/api/preview/:filename', (req, res) => {
   const content = livePreviewPages[req.params.filename];
   if (!content) return res.status(404).send('Preview expired or not found.');
@@ -174,6 +183,7 @@ app.get('/api/preview/:filename', (req, res) => {
   res.send(content);
 });
 
+// Crawling and Inlining Stream Pipeline
 app.get('/api/clone-stream', async (req, res) => {
   const { url, maxPages = 3 } = req.query;
 
@@ -186,9 +196,10 @@ app.get('/api/clone-stream', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
+  // Keep-alive timer to prevent Render gateway proxy drops
   const keepAlive = setInterval(() => {
     res.write(': keepalive\n\n');
-  }, 10000);
+  }, 7000);
 
   let browser;
   const capturedApis = [];
@@ -201,7 +212,7 @@ app.get('/api/clone-stream', async (req, res) => {
   const targetOrigin = new URL(url).origin;
 
   try {
-    sendSSE(res, { status: 'info', message: '🖥️ Launching Chromium Engine...' });
+    sendSSE(res, { status: 'info', message: '🖥️ Launching Cloud Chromium Engine...' });
 
     browser = await puppeteer.launch({
       headless: 'new',
@@ -214,12 +225,29 @@ app.get('/api/clone-stream', async (req, res) => {
         '--disable-software-rasterizer',
         '--no-zygote',
         '--single-process',
-        '--js-flags="--max-old-space-size=384"'
+        '--mute-audio',
+        '--js-flags="--max-old-space-size=256"'
       ]
     });
 
     const pages = await browser.pages();
     const page = pages[0] || (await browser.newPage());
+
+    // Intercept requests: Block heavy video streams & video codecs to prevent 512MB RAM crash
+    await page.setRequestInterception(true);
+    page.on('request', (req) => {
+      const type = req.resourceType();
+      const rUrl = req.url();
+      if (
+        ['media'].includes(type) ||
+        rUrl.includes('googlevideo.com') ||
+        rUrl.includes('videoplayback')
+      ) {
+        req.abort();
+      } else {
+        req.continue();
+      }
+    });
 
     await page.setUserAgent(
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -262,12 +290,12 @@ app.get('/api/clone-stream', async (req, res) => {
       sendSSE(res, { status: 'info', message: `🌐 [${pageIndex + 1}/${maxLimit}] Processing: ${currentUrl}` });
 
       try {
-        await page.goto(currentUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+        await page.goto(currentUrl, { waitUntil: 'domcontentloaded', timeout: 25000 });
       } catch (e) {}
 
       await new Promise(r => setTimeout(r, 1500));
 
-      // Extract inline & external scripts for the zip bundle
+      // Extract script bundles for developer archive
       const pageScriptsInfo = await page.evaluate(() => {
         const inlines = [];
         const externals = [];
@@ -276,7 +304,7 @@ app.get('/api/clone-stream', async (req, res) => {
           if (src && externals.length < 6) externals.push(src);
           else if (!src && inlines.length < 3) {
             const code = s.innerText.trim();
-            if (code.length > 50 && code.length < 100000) inlines.push(code);
+            if (code.length > 50 && code.length < 50000) inlines.push(code);
           }
         });
         return { inlines, externals };
@@ -295,7 +323,7 @@ app.get('/api/clone-stream', async (req, res) => {
         try {
           const resolvedScriptUrl = new URL(src, currentParsedUrl.href).href;
           if (!sessionCapturedScripts.some(s => s.url === resolvedScriptUrl) && sessionCapturedScripts.length < 10) {
-            const jsRes = await axios.get(resolvedScriptUrl, { timeout: 3000, maxContentLength: 1000000 });
+            const jsRes = await axios.get(resolvedScriptUrl, { timeout: 3000, maxContentLength: 800000 });
             if (jsRes.data && typeof jsRes.data === 'string') {
               sessionCapturedScripts.push({
                 url: resolvedScriptUrl,
@@ -307,7 +335,7 @@ app.get('/api/clone-stream', async (req, res) => {
         } catch (e) {}
       }
 
-      // Extract inline runtime styles computed by the browser
+      // 1. EXTRACT RUNTIME COMPUTED STYLES (Crucial for portfolios & SPA CSS)
       const inlineStyles = await page.evaluate(() => {
         let css = '';
         const sheets = Array.from(document.styleSheets).slice(0, 10);
@@ -322,15 +350,19 @@ app.get('/api/clone-stream', async (req, res) => {
 
       const rawHtml = await extractFullDOMIncludingShadow(page);
 
+      // Extract and filter navigation links (excluding heavy video streams)
       const $temp = cheerio.load(rawHtml);$temp('a[href]').each((_, el) => {
         const href = $temp(el).attr('href');
         if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
         try {
           const resolved = new URL(href, currentParsedUrl.href);
           if (resolved.origin === targetOrigin) {
-            const cleanHref = normalizeUrl(resolved.href);
-            if (!visited.has(cleanHref) && !queue.includes(cleanHref) && queue.length + visited.size < 20) {
-              queue.push(cleanHref);
+            const p = resolved.pathname;
+            if (!p.includes('/watch') && !p.includes('/shorts') && !p.includes('/live')) {
+              const cleanHref = normalizeUrl(resolved.href);
+              if (!visited.has(cleanHref) && !queue.includes(cleanHref) && queue.length + visited.size < 15) {
+                queue.push(cleanHref);
+              }
             }
           }
         } catch (e) {}
@@ -344,20 +376,21 @@ app.get('/api/clone-stream', async (req, res) => {
       });
     }
 
+    // Immediately close browser to release ~300MB RAM before Cheerio parsing
     await browser.close();
     browser = null;
 
-    sendSSE(res, { status: 'info', message: `🎨 Inlining stylesheets and rebuilding layouts...` });
+    sendSSE(res, { status: 'info', message: `🎨 Inlining external stylesheets & building layout...` });
 
     const processedPages = [];
     for (const pageData of crawledPages) {
       const $ = cheerio.load(pageData.rawHtml);
       const parsedPageUrl = new URL(pageData.originalUrl);
 
-      // Strip original scripts and prefetch tags
+      // Strip original scripts and prefetch
       $('script, link[rel="preload"], link[rel="prefetch"]').remove();
 
-      // INLINE EXTERNAL STYLESHEETS (Fixes broken portfolio/site styling)
+      // 2. INLINE EXTERNAL STYLESHEETS WITH FALLBACK RESOLUTION
       const cssLinks = $('link[rel="stylesheet"]').toArray().slice(0, 8);
       for (const link of cssLinks) {
         const href = $(link).attr('href');
@@ -365,8 +398,8 @@ app.get('/api/clone-stream', async (req, res) => {
           try {
             const resolvedCssUrl = new URL(href, parsedPageUrl.href).href;
             const cssRes = await axios.get(resolvedCssUrl, {
-              timeout: 4000,
-              maxContentLength: 1500000,
+              timeout: 3000,
+              maxContentLength: 1200000,
               headers: { 'User-Agent': 'Mozilla/5.0' }
             });
             if (cssRes.data && typeof cssRes.data === 'string') {
@@ -383,12 +416,12 @@ app.get('/api/clone-stream', async (req, res) => {
         }
       }
 
-      // Inject computed runtime styles
+      // 3. INJECT COMPUTED STYLES
       if (pageData.inlineStyles) {
         $('head').append(`<style>\n${pageData.inlineStyles}\n</style>`);
       }
 
-      // Convert relative media sources to absolute
+      // Convert relative media to absolute URLs
       $('img[src], source[src]').each((_, el) => {
         const src = $(el).attr('src');
         if (src && !src.startsWith('data:') && !src.startsWith('http')) {
@@ -398,7 +431,7 @@ app.get('/api/clone-stream', async (req, res) => {
         }
       });
 
-      // Remap internal links
+      // Remap local navigation
       $('a[href]').each((_, el) => {
         const href = $(el).attr('href');
         if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
