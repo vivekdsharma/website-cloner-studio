@@ -1,6 +1,60 @@
 import { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
+
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+
+// Micro SVGs for Senior Dev Aesthetic
+const GlobeIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10" />
+    <line x1="2" y1="12" x2="22" y2="12" />
+    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+  </svg>
+);
+
+const LockIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+  </svg>
+);
+
+const DownloadIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="7 10 12 15 17 10" />
+    <line x1="12" y1="15" x2="12" y2="3" />
+  </svg>
+);
+
+const ExternalLinkIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+    <polyline points="15 3 21 3 21 9" />
+    <line x1="10" y1="14" x2="21" y2="3" />
+  </svg>
+);
+
+const TerminalIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="4 17 10 11 4 5" />
+    <line x1="12" y1="19" x2="20" y2="19" />
+  </svg>
+);
+
+const RefreshIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="23 4 23 10 17 10" />
+    <polyline points="1 20 1 14 7 14" />
+    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+  </svg>
+);
+
+const Spinner = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
+    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+  </svg>
+);
 
 export default function App() {
   const [url, setUrl] = useState('');
@@ -17,18 +71,14 @@ export default function App() {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
 
-  // Handle intra-iframe navigation messages
   useEffect(() => {
     const handleIframeMessage = (event) => {
       if (event.data && event.data.type === 'STUDIO_NAVIGATE') {
         const targetFile = event.data.fileName;
         const pageIdx = crawledPages.findIndex(p => p.fileName === targetFile);
-        if (pageIdx !== -1) {
-          setActivePageIndex(pageIdx);
-        }
+        if (pageIdx !== -1) setActivePageIndex(pageIdx);
       }
     };
-
     window.addEventListener('message', handleIframeMessage);
     return () => window.removeEventListener('message', handleIframeMessage);
   }, [crawledPages]);
@@ -50,7 +100,8 @@ export default function App() {
     eventSource.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);
-        setLogs((prev) => [...prev, payload.message]);
+        const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+        setLogs((prev) => [...prev, { time, text: payload.message, status: payload.status }]);
 
         if (payload.status === 'complete') {
           const pages = payload.crawledPages || [];
@@ -73,7 +124,8 @@ export default function App() {
     };
 
     eventSource.onerror = () => {
-      setLogs((prev) => [...prev, '❌ Connection closed.']);
+      const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+      setLogs((prev) => [...prev, { time, text: '[connection] Stream closed by host.', status: 'error' }]);
       setCloning(false);
       eventSource.close();
     };
@@ -88,12 +140,8 @@ export default function App() {
 
     try {
       const response = await axios.post(
-        '${BACKEND_URL}/api/download-zip',
-        { 
-          crawledPages: pagesPayload, 
-          html: previewHtml,
-          capturedApis
-        },
+        `${BACKEND_URL}/api/download-zip`,
+        { crawledPages: pagesPayload, html: previewHtml, capturedApis },
         { responseType: 'blob' }
       );
       const blob = new Blob([response.data], { type: 'application/zip' });
@@ -104,8 +152,9 @@ export default function App() {
       document.body.appendChild(link);
       link.click();
       link.remove();
+      window.URL.revokeObjectURL(downloadUrl);
     } catch (e) {
-      alert('Download failed');
+      alert('Archive download failed.');
     }
   };
 
@@ -113,157 +162,455 @@ export default function App() {
   const previewServerUrl = activePageFileName ? `${BACKEND_URL}/api/preview/${activePageFileName}` : '';
 
   return (
-    <div style={{ display: 'flex', height: '100vh', width: '100vw', fontFamily: 'system-ui, sans-serif', backgroundColor: '#0f172a', color: '#f8fafc', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', width: '100vw', height: '100vh', background: '#09090b', color: '#f4f4f5', fontFamily: 'Inter, sans-serif' }}>
       
-      {/* LEFT CONTROL PANEL */}
-      <div style={{ width: '450px', minWidth: '450px', borderRight: '1px solid #334155', display: 'flex', flexDirection: 'column', padding: '24px', boxSizing: 'border-box' }}>
-        <h1 style={{ fontSize: '20px', fontWeight: 'bold', margin: '0 0 6px 0', color: '#38bdf8' }}>
-          Website Cloner Studio
-        </h1>
-        <p style={{ fontSize: '13px', color: '#94a3b8', margin: '0 0 16px 0' }}>
-          Multi-page Link Remapper, CSS Inliner, JS Bundler & API Sniffer.
-        </p>
+      {/* LEFT: WORKSPACE CONTROL PANEL */}
+      <aside style={{
+        width: '420px',
+        minWidth: '420px',
+        borderRight: '1px solid rgba(255, 255, 255, 0.08)',
+        display: 'flex',
+        flexDirection: 'column',
+        background: '#0c0c0e',
+        padding: '24px',
+        gap: '20px'
+      }}>
+        {/* Brand Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '15px', fontWeight: '600', letterSpacing: '-0.02em', color: '#fff' }}>
+                Archival Engine
+              </span>
+              <span style={{
+                fontSize: '10px',
+                fontWeight: '500',
+                padding: '2px 6px',
+                background: 'rgba(255, 255, 255, 0.06)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '4px',
+                color: '#a1a1aa'
+              }}>
+                v2.1
+              </span>
+            </div>
+            <p style={{ fontSize: '12px', color: '#71717a', marginTop: '2px' }}>
+              Declarative Shadow DOM & API Sniffer
+            </p>
+          </div>
 
-        <form onSubmit={handleStartClone} style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '14px' }}>
-          <input
-            type="url"
-            required
-            placeholder="https://example.com"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            disabled={cloning}
-            style={{
-              padding: '12px 14px',
-              backgroundColor: '#1e293b',
-              border: '1px solid #475569',
-              borderRadius: '8px',
-              color: '#fff',
-              fontSize: '14px',
-              outline: 'none'
-            }}
-          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{
+              width: '7px',
+              height: '7px',
+              borderRadius: '50%',
+              background: cloning ? '#f59e0b' : (crawledPages.length > 0 ? '#10b981' : '#52525b'),
+              boxShadow: cloning ? '0 0 8px rgba(245, 158, 11, 0.4)' : 'none'
+            }} />
+            <span style={{ fontSize: '11px', color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              {cloning ? 'Crawling' : (crawledPages.length > 0 ? 'Ready' : 'Idle')}
+            </span>
+          </div>
+        </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <label style={{ fontSize: '13px', color: '#94a3b8' }}>Pages to Crawl:</label>
-            <select
-              value={maxPages}
-              onChange={(e) => setMaxPages(e.target.value)}
-              disabled={cloning}
-              style={{
-                backgroundColor: '#1e293b',
-                color: '#fff',
-                border: '1px solid #475569',
-                borderRadius: '6px',
-                padding: '6px 12px',
-                fontSize: '13px'
-              }}
-            >
-              <option value="3">3 Pages</option>
-              <option value="5">5 Pages</option>
-              <option value="10">10 Pages</option>
-              <option value="15">15 Pages</option>
-              <option value="20">20 Pages</option>
-            </select>
+        {/* Input Form */}
+        <form onSubmit={handleStartClone} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: '500', color: '#a1a1aa', marginBottom: '6px', letterSpacing: '0.02em' }}>
+              TARGET URL
+            </label>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              background: '#141417',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '6px',
+              padding: '0 12px',
+              transition: 'border-color 0.15s ease'
+            }}>
+              <span style={{ color: '#52525b', display: 'flex', alignItems: 'center', marginRight: '8px' }}>
+                <GlobeIcon />
+              </span>
+              <input
+                type="url"
+                required
+                placeholder="https://example.com"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                disabled={cloning}
+                style={{
+                  width: '100%',
+                  padding: '10px 0',
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                  color: '#fff',
+                  fontSize: '13px',
+                  fontFamily: 'inherit'
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Crawl Depth Segmented Control (Pills instead of native Select) */}
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <label style={{ fontSize: '11px', fontWeight: '500', color: '#a1a1aa', letterSpacing: '0.02em' }}>
+                CRAWL DEPTH
+              </label>
+              <span style={{ fontSize: '11px', color: '#52525b' }}>{maxPages} pages</span>
+            </div>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(4, 1fr)',
+              background: '#141417',
+              padding: '3px',
+              borderRadius: '6px',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              gap: '3px'
+            }}>
+              {[3, 5, 10, 20].map((num) => (
+                <button
+                  key={num}
+                  type="button"
+                  disabled={cloning}
+                  onClick={() => setMaxPages(num)}
+                  style={{
+                    padding: '6px 0',
+                    fontSize: '12px',
+                    fontWeight: maxPages === num ? '600' : '400',
+                    background: maxPages === num ? '#27272a' : 'transparent',
+                    color: maxPages === num ? '#ffffff' : '#71717a',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: cloning ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  {num}P
+                </button>
+              ))}
+            </div>
           </div>
 
           <button
             type="submit"
             disabled={cloning}
             style={{
-              padding: '12px',
-              backgroundColor: cloning ? '#475569' : '#0284c7',
-              color: '#fff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              padding: '10px',
+              background: cloning ? '#27272a' : '#ffffff',
+              color: cloning ? '#71717a' : '#09090b',
               border: 'none',
-              borderRadius: '8px',
-              fontWeight: '600',
+              borderRadius: '6px',
+              fontWeight: '500',
+              fontSize: '13px',
               cursor: cloning ? 'not-allowed' : 'pointer',
-              fontSize: '14px'
+              transition: 'background 0.15s ease',
+              marginTop: '4px'
             }}
           >
-            {cloning ? 'Cloning & Interlinking...' : 'Launch Universal Clone'}
+            {cloning ? (
+              <>
+                <Spinner />
+                <span>Processing Target...</span>
+              </>
+            ) : (
+              <span>Start Extraction</span>
+            )}
           </button>
         </form>
 
-        {(crawledPages.length > 0 || previewHtml) && (
-          <button
-            onClick={handleDownloadZip}
-            style={{
-              padding: '12px',
-              backgroundColor: '#10b981',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '8px',
-              fontWeight: '600',
-              cursor: 'pointer',
-              fontSize: '14px',
-              marginBottom: '14px'
-            }}
-          >
-            ⬇️ Download Developer Package ({crawledPages.length} Pages + JS Files + Mock APIs)
-          </button>
+        {/* Download Artifact Banner */}
+        {crawledPages.length > 0 && (
+          <div style={{
+            background: '#141417',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
+            borderRadius: '6px',
+            padding: '12px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '12px', fontWeight: '500', color: '#f4f4f5' }}>Archive Ready</span>
+              <span style={{ fontSize: '11px', color: '#10b981', background: 'rgba(16, 185, 129, 0.1)', padding: '2px 6px', borderRadius: '4px' }}>
+                {crawledPages.length} Pages · {capturedApis.length} APIs
+              </span>
+            </div>
+            <button
+              onClick={handleDownloadZip}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: '8px',
+                background: 'rgba(255, 255, 255, 0.08)',
+                color: '#fff',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                borderRadius: '5px',
+                fontSize: '12px',
+                fontWeight: '500',
+                cursor: 'pointer'
+              }}
+            >
+              <DownloadIcon />
+              <span>Download Bundle (.zip)</span>
+            </button>
+          </div>
         )}
 
-        <div style={{ flex: 1, backgroundColor: '#020617', borderRadius: '8px', border: '1px solid #1e293b', padding: '14px', overflowY: 'auto', fontFamily: 'monospace', fontSize: '12px', lineHeight: '1.6' }}>
-          <div style={{ color: '#64748b', marginBottom: '8px' }}>--- ENGINE LOGS ---</div>
-          {logs.map((log, index) => (
-            <div key={index} style={{ color: log.startsWith('❌') ? '#ef4444' : log.startsWith('🎉') ? '#10b981' : log.startsWith('⚡') ? '#38bdf8' : log.startsWith('📡') ? '#f59e0b' : '#cbd5e1' }}>
-              {log}
+        {/* Terminal / CLI Console */}
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          background: '#050506',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          borderRadius: '6px',
+          overflow: 'hidden'
+        }}>
+          {/* Console Header */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '8px 12px',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+            background: '#0a0a0c'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#a1a1aa', fontSize: '11px', fontWeight: '500' }}>
+              <TerminalIcon />
+              <span>Dev Console</span>
             </div>
-          ))}
-          <div ref={logsEndRef} />
-        </div>
-      </div>
-
-      {/* RIGHT PREVIEW PANEL */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#1e293b' }}>
-        
-        {/* Page Switcher Tabs */}
-        <div style={{ padding: '10px 16px', borderBottom: '1px solid #334155', display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#0f172a', overflowX: 'auto' }}>
-          {crawledPages.length > 0 ? (
-            crawledPages.map((p, idx) => (
+            {logs.length > 0 && (
               <button
-                key={idx}
-                onClick={() => setActivePageIndex(idx)}
+                onClick={() => setLogs([])}
                 style={{
-                  backgroundColor: activePageIndex === idx ? '#0284c7' : '#1e293b',
-                  color: '#fff',
-                  border: '1px solid #475569',
-                  borderRadius: '6px',
-                  padding: '6px 12px',
-                  fontSize: '12px',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap'
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#52525b',
+                  fontSize: '10px',
+                  cursor: 'pointer'
                 }}
               >
-                📄 {p.fileName}
+                Clear
               </button>
-            ))
-          ) : (
-            <span style={{ fontSize: '13px', color: '#94a3b8' }}>Preview Window</span>
-          )}
-        </div>
+            )}
+          </div>
 
-        <div style={{ flex: 1, padding: '16px', boxSizing: 'border-box' }}>
-          {previewServerUrl ? (
-            <iframe
-              title="Cloned View"
-              src={previewServerUrl}
-              style={{
-                width: '100%',
-                height: '100%',
-                border: 'none',
-                borderRadius: '8px',
-                backgroundColor: '#ffffff'
-              }}
-            />
-          ) : (
-            <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontSize: '14px' }}>
-              Enter any website URL to preview cloned pages and switch tabs here.
+          {/* Console Log Feed */}
+          <div style={{
+            flex: 1,
+            padding: '12px',
+            overflowY: 'auto',
+            fontFamily: '"Geist Mono", "JetBrains Mono", Menlo, monospace',
+            fontSize: '11px',
+            lineHeight: '1.7',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '2px'
+          }}>
+            {logs.length === 0 ? (
+              <span style={{ color: '#3f3f46' }}>// Awaiting execution pipeline...</span>
+            ) : (
+              logs.map((log, i) => {
+                const isError = log.status === 'error' || log.text.includes('Error') || log.text.includes('[error]');
+                const isDone = log.status === 'complete' || log.text.includes('[bundle]');
+                const isApi = log.text.includes('[sniff]') || log.text.includes('API');
+                return (
+                  <div key={i} style={{ display: 'flex', gap: '8px', wordBreak: 'break-all' }}>
+                    <span style={{ color: '#52525b', flexShrink: 0 }}>{log.time}</span>
+                    <span style={{
+                      color: isError ? '#f87171' : (isDone ? '#4ade80' : (isApi ? '#fbbf24' : '#d4d4d8'))
+                    }}>
+                      {log.text}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+            <div ref={logsEndRef} />
+          </div>
+        </div>
+      </aside>
+
+      {/* RIGHT: REALISTIC BROWSER FRAMEWORK */}
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#09090b', padding: '16px' }}>
+        
+        {/* Browser Mockup Shell */}
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          background: '#111113',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          borderRadius: '8px',
+          overflow: 'hidden',
+          boxShadow: '0 20px 40px rgba(0, 0, 0, 0.5)'
+        }}>
+          
+          {/* Top Window Chrome */}
+          <div style={{
+            height: '40px',
+            background: '#161619',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            padding: '0 12px',
+            gap: '12px'
+          }}>
+            {/* macOS Window Controls */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#ef4444', opacity: 0.8 }} />
+              <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#f59e0b', opacity: 0.8 }} />
+              <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#10b981', opacity: 0.8 }} />
+            </div>
+
+            {/* Address Bar */}
+            <div style={{
+              flex: 1,
+              maxWidth: '560px',
+              height: '26px',
+              background: '#09090b',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: '5px',
+              display: 'flex',
+              alignItems: 'center',
+              padding: '0 10px',
+              gap: '8px',
+              color: '#71717a',
+              fontSize: '11px'
+            }}>
+              <LockIcon />
+              <span style={{ color: '#d4d4d8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {previewServerUrl ? `sandbox://${activePageFileName}` : 'sandbox://idle'}
+              </span>
+            </div>
+
+            {/* Quick Actions */}
+            {previewServerUrl && (
+              <a
+                href={previewServerUrl}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  color: '#a1a1aa',
+                  textDecoration: 'none',
+                  fontSize: '11px',
+                  marginLeft: 'auto',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  background: 'rgba(255, 255, 255, 0.04)'
+                }}
+              >
+                <span>New Tab</span>
+                <ExternalLinkIcon />
+              </a>
+            )}
+          </div>
+
+          {/* Route Tab Strip (Multi-Page Switcher) */}
+          {crawledPages.length > 0 && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              padding: '6px 12px',
+              gap: '4px',
+              background: '#121214',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+              overflowX: 'auto'
+            }}>
+              {crawledPages.map((page, idx) => {
+                const isActive = activePageIndex === idx;
+                return (
+                  <button
+                    key={idx}
+                    onClick={() => setActivePageIndex(idx)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '4px 10px',
+                      borderRadius: '4px',
+                      background: isActive ? '#27272a' : 'transparent',
+                      color: isActive ? '#ffffff' : '#71717a',
+                      border: 'none',
+                      fontSize: '11px',
+                      fontFamily: '"Geist Mono", monospace',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <span>{page.fileName}</span>
+                  </button>
+                );
+              })}
             </div>
           )}
-        </div>
-      </div>
 
+          {/* Iframe Viewport Canvas */}
+          <div style={{ flex: 1, position: 'relative', background: '#09090b' }}>
+            {previewServerUrl ? (
+              <iframe
+                title="Viewport"
+                src={previewServerUrl}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  border: 'none',
+                  background: '#ffffff'
+                }}
+              />
+            ) : (
+              <div style={{
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                color: '#52525b'
+              }}>
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '8px',
+                  border: '1px dashed #27272a',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#71717a'
+                }}>
+                  <GlobeIcon />
+                </div>
+                <p style={{ fontSize: '13px', color: '#71717a', fontWeight: '500' }}>
+                  No Active Session
+                </p>
+                <p style={{ fontSize: '11px', color: '#52525b', maxWidth: '280px', textAlign: 'center' }}>
+                  Enter a target URL and launch the crawler to inspect the sandboxed DOM.
+                </p>
+              </div>
+            )}
+          </div>
+
+        </div>
+      </main>
+
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 }

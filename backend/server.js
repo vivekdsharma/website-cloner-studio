@@ -198,11 +198,11 @@ app.get('/api/clone-stream', async (req, res) => {
   const queue = [url];
   const visited = new Set();
   const urlToFilenameMap = {};
-  const maxLimit = Math.min(parseInt(maxPages, 10) || 5, 20); // Allows up to 20 pages
+  const maxLimit = Math.min(parseInt(maxPages, 10) || 5, 20);
   const targetOrigin = new URL(url).origin;
 
   try {
-    sendSSE(res, { status: 'info', message: '🖥️ Launching Cloud Chromium Engine...' });
+    sendSSE(res, { status: 'info', message: '[engine] Initializing Chromium execution sandbox...' });
 
     browser = await puppeteer.launch({
       headless: 'new',
@@ -257,8 +257,9 @@ app.get('/api/clone-stream', async (req, res) => {
               status: response.status(),
               data: json
             });
-            const shortUrl = reqUrl.length > 50 ? reqUrl.substring(0, 47) + '...' : reqUrl;
-            sendSSE(res, { status: 'info', message: `📡 Sniffed API Endpoint: ${shortUrl}` });
+            const pathname = new URL(reqUrl).pathname;
+            const shortPath = pathname.length > 35 ? pathname.substring(0, 32) + '...' : pathname;
+            sendSSE(res, { status: 'info', message: `[sniff] ${response.request().method()} ${shortPath} -> cached (${response.status()})` });
           }
         } catch (e) {}
       }
@@ -276,7 +277,7 @@ app.get('/api/clone-stream', async (req, res) => {
       urlToFilenameMap[normalizedCurrent] = filename;
       urlToFilenameMap[currentUrl] = filename;
 
-      sendSSE(res, { status: 'info', message: `🌐 [${pageIndex + 1}/${maxLimit}] Processing: ${currentUrl}` });
+      sendSSE(res, { status: 'info', message: `[crawl] (${pageIndex + 1}/${maxLimit}) Fetching DOM: ${currentUrl}` });
 
       try {
         await page.goto(currentUrl, { waitUntil: 'networkidle2', timeout: 30000 });
@@ -337,7 +338,7 @@ app.get('/api/clone-stream', async (req, res) => {
         return css;
       });
 
-      // ROBUST LIVE-DOM LINK EXTRACTION (Traverses Shadow Roots + Light DOM directly in browser)
+      // Live-DOM link extraction
       const liveDiscoveredLinks = await page.evaluate(() => {
         const found = [];
         function collect(root) {
@@ -356,7 +357,6 @@ app.get('/api/clone-stream', async (req, res) => {
         return Array.from(new Set(found));
       });
 
-      // Filter and queue safe links
       for (const rawHref of liveDiscoveredLinks) {
         try {
           const resolved = new URL(rawHref, currentParsedUrl.href);
@@ -385,7 +385,7 @@ app.get('/api/clone-stream', async (req, res) => {
     await browser.close();
     browser = null;
 
-    sendSSE(res, { status: 'info', message: `🎨 Inlining external stylesheets & building layout...` });
+    sendSSE(res, { status: 'info', message: `[assets] Resolving external styles & inlining into DOM tree...` });
 
     const processedPages = [];
     for (const pageData of crawledPages) {
@@ -466,7 +466,7 @@ app.get('/api/clone-stream', async (req, res) => {
 
     sendSSE(res, {
       status: 'complete',
-      message: `🎉 All ${processedPages.length} pages cloned with CSS and layouts intact!`,
+      message: `[bundle] Cloned ${processedPages.length} routes with full CSS inline and local remapping.`,
       html: processedPages[0]?.html || '',
       crawledPages: processedPages,
       capturedApis
@@ -477,7 +477,7 @@ app.get('/api/clone-stream', async (req, res) => {
   } catch (err) {
     clearInterval(keepAlive);
     if (browser) await browser.close();
-    sendSSE(res, { status: 'error', message: `❌ Error: ${err.message}` });
+    sendSSE(res, { status: 'error', message: `[error] Execution failure: ${err.message}` });
     res.end();
   }
 });
