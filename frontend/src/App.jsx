@@ -3,7 +3,7 @@ import axios from 'axios';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
-// Micro SVGs for Senior Dev Aesthetic
+// Senior Developer Micro-Iconography
 const GlobeIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="10" />
@@ -42,17 +42,16 @@ const TerminalIcon = () => (
   </svg>
 );
 
-const RefreshIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="23 4 23 10 17 10" />
-    <polyline points="1 20 1 14 7 14" />
-    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-  </svg>
-);
-
 const Spinner = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
     <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+  </svg>
+);
+
+const CheckCircleIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+    <polyline points="22 4 12 14.01 9 11.01" />
   </svg>
 );
 
@@ -65,18 +64,23 @@ export default function App() {
   const [previewHtml, setPreviewHtml] = useState('');
   const [activePageIndex, setActivePageIndex] = useState(0);
   const [capturedApis, setCapturedApis] = useState([]);
+  const [downloading, setDownloading] = useState(false);
   const logsEndRef = useRef(null);
 
+  // Auto-scroll dev console
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
 
+  // Listen for iframe offline navigation messages (e.g. clicking internal links)
   useEffect(() => {
     const handleIframeMessage = (event) => {
       if (event.data && event.data.type === 'STUDIO_NAVIGATE') {
         const targetFile = event.data.fileName;
-        const pageIdx = crawledPages.findIndex(p => p.fileName === targetFile);
-        if (pageIdx !== -1) setActivePageIndex(pageIdx);
+        const pageIdx = crawledPages.findIndex((p) => p.fileName === targetFile);
+        if (pageIdx !== -1) {
+          setActivePageIndex(pageIdx);
+        }
       }
     };
     window.addEventListener('message', handleIframeMessage);
@@ -109,7 +113,7 @@ export default function App() {
           setPreviewHtml(payload.html || '');
           setCapturedApis(payload.capturedApis || []);
 
-          const indexPos = pages.findIndex(p => p.fileName === 'index.html');
+          const indexPos = pages.findIndex((p) => p.fileName === 'index.html');
           setActivePageIndex(indexPos !== -1 ? indexPos : 0);
 
           setCloning(false);
@@ -119,26 +123,27 @@ export default function App() {
           eventSource.close();
         }
       } catch (err) {
-        console.error('SSE Error:', err);
+        console.error('SSE Payload parsing error:', err);
       }
     };
 
     eventSource.onerror = () => {
       const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-      setLogs((prev) => [...prev, { time, text: '[connection] Stream closed by host.', status: 'error' }]);
+      setLogs((prev) => [...prev, { time, text: '[connection] Event stream completed or closed by server.', status: 'info' }]);
       setCloning(false);
       eventSource.close();
     };
   };
 
   const handleDownloadZip = async () => {
-    const pagesPayload = (crawledPages && crawledPages.length > 0)
+    const pagesPayload = crawledPages && crawledPages.length > 0
       ? crawledPages
-      : (previewHtml ? [{ fileName: 'index.html', html: previewHtml }] : []);
+      : (previewHtml ? [{ fileName: 'index.html', originalUrl: url || 'Root', html: previewHtml }] : []);
 
-    if (!pagesPayload.length) return;
+    if (!pagesPayload.length || downloading) return;
 
     try {
+      setDownloading(true);
       const response = await axios.post(
         `${BACKEND_URL}/api/download-zip`,
         { crawledPages: pagesPayload, html: previewHtml, capturedApis },
@@ -154,7 +159,9 @@ export default function App() {
       link.remove();
       window.URL.revokeObjectURL(downloadUrl);
     } catch (e) {
-      alert('Archive download failed.');
+      alert('Archive download failed: ' + (e.message || 'Server error'));
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -162,12 +169,12 @@ export default function App() {
   const previewServerUrl = activePageFileName ? `${BACKEND_URL}/api/preview/${activePageFileName}` : '';
 
   return (
-    <div style={{ display: 'flex', width: '100vw', height: '100vh', background: '#09090b', color: '#f4f4f5', fontFamily: 'Inter, sans-serif' }}>
+    <div style={{ display: 'flex', width: '100vw', height: '100vh', background: '#09090b', color: '#f4f4f5', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
       
       {/* LEFT: WORKSPACE CONTROL PANEL */}
       <aside style={{
-        width: '420px',
-        minWidth: '420px',
+        width: '430px',
+        minWidth: '430px',
         borderRight: '1px solid rgba(255, 255, 255, 0.08)',
         display: 'flex',
         flexDirection: 'column',
@@ -180,7 +187,7 @@ export default function App() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '15px', fontWeight: '600', letterSpacing: '-0.02em', color: '#fff' }}>
-                Archival Engine
+                Universal Archiver Engine
               </span>
               <span style={{
                 fontSize: '10px',
@@ -191,7 +198,7 @@ export default function App() {
                 borderRadius: '4px',
                 color: '#a1a1aa'
               }}>
-                v2.1
+                v2.1 Pro
               </span>
             </div>
             <p style={{ fontSize: '12px', color: '#71717a', marginTop: '2px' }}>
@@ -201,19 +208,20 @@ export default function App() {
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{
-              width: '7px',
-              height: '7px',
+              width: '8px',
+              height: '8px',
               borderRadius: '50%',
               background: cloning ? '#f59e0b' : (crawledPages.length > 0 ? '#10b981' : '#52525b'),
-              boxShadow: cloning ? '0 0 8px rgba(245, 158, 11, 0.4)' : 'none'
+              boxShadow: cloning ? '0 0 8px rgba(245, 158, 11, 0.5)' : 'none',
+              transition: 'all 0.2s ease'
             }} />
-            <span style={{ fontSize: '11px', color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: '11px', color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: '500' }}>
               {cloning ? 'Crawling' : (crawledPages.length > 0 ? 'Ready' : 'Idle')}
             </span>
           </div>
         </div>
 
-        {/* Input Form */}
+        {/* Target URL Input Form */}
         <form onSubmit={handleStartClone} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div>
             <label style={{ display: 'block', fontSize: '11px', fontWeight: '500', color: '#a1a1aa', marginBottom: '6px', letterSpacing: '0.02em' }}>
@@ -252,24 +260,24 @@ export default function App() {
             </div>
           </div>
 
-          {/* Crawl Depth Segmented Control (Pills instead of native Select) */}
+          {/* Crawl Depth Segmented Control */}
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
               <label style={{ fontSize: '11px', fontWeight: '500', color: '#a1a1aa', letterSpacing: '0.02em' }}>
                 CRAWL DEPTH
               </label>
-              <span style={{ fontSize: '11px', color: '#52525b' }}>{maxPages} pages</span>
+              <span style={{ fontSize: '11px', color: '#52525b' }}>{maxPages} pages max</span>
             </div>
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(4, 1fr)',
+              gridTemplateColumns: 'repeat(5, 1fr)',
               background: '#141417',
               padding: '3px',
               borderRadius: '6px',
               border: '1px solid rgba(255, 255, 255, 0.08)',
               gap: '3px'
             }}>
-              {[3, 5, 10, 20].map((num) => (
+              {[1, 3, 5, 10, 20].map((num) => (
                 <button
                   key={num}
                   type="button"
@@ -277,7 +285,7 @@ export default function App() {
                   onClick={() => setMaxPages(num)}
                   style={{
                     padding: '6px 0',
-                    fontSize: '12px',
+                    fontSize: '11px',
                     fontWeight: maxPages === num ? '600' : '400',
                     background: maxPages === num ? '#27272a' : 'transparent',
                     color: maxPages === num ? '#ffffff' : '#71717a',
@@ -316,10 +324,10 @@ export default function App() {
             {cloning ? (
               <>
                 <Spinner />
-                <span>Processing Target...</span>
+                <span>Processing Target Pipeline...</span>
               </>
             ) : (
-              <span>Start Extraction</span>
+              <span>Start Universal Extraction</span>
             )}
           </button>
         </form>
@@ -336,35 +344,40 @@ export default function App() {
             gap: '10px'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '12px', fontWeight: '500', color: '#f4f4f5' }}>Archive Ready</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ color: '#10b981' }}><CheckCircleIcon /></span>
+                <span style={{ fontSize: '12px', fontWeight: '500', color: '#f4f4f5' }}>Archive Ready</span>
+              </div>
               <span style={{ fontSize: '11px', color: '#10b981', background: 'rgba(16, 185, 129, 0.1)', padding: '2px 6px', borderRadius: '4px' }}>
                 {crawledPages.length} Pages · {capturedApis.length} APIs
               </span>
             </div>
             <button
               onClick={handleDownloadZip}
+              disabled={downloading}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '8px',
                 padding: '8px',
-                background: 'rgba(255, 255, 255, 0.08)',
+                background: downloading ? '#27272a' : 'rgba(255, 255, 255, 0.08)',
                 color: '#fff',
                 border: '1px solid rgba(255, 255, 255, 0.12)',
                 borderRadius: '5px',
                 fontSize: '12px',
                 fontWeight: '500',
-                cursor: 'pointer'
+                cursor: downloading ? 'wait' : 'pointer',
+                transition: 'all 0.15s ease'
               }}
             >
-              <DownloadIcon />
-              <span>Download Bundle (.zip)</span>
+              {downloading ? <Spinner /> : <DownloadIcon />}
+              <span>{downloading ? 'Building Archive...' : 'Download Bundle (.zip)'}</span>
             </button>
           </div>
         )}
 
-        {/* Terminal / CLI Console */}
+        {/* Dev Console & SSE Telemetry */}
         <div style={{
           flex: 1,
           display: 'flex',
@@ -408,7 +421,7 @@ export default function App() {
             flex: 1,
             padding: '12px',
             overflowY: 'auto',
-            fontFamily: '"Geist Mono", "JetBrains Mono", Menlo, monospace',
+            fontFamily: '"JetBrains Mono", "Geist Mono", Menlo, Consolas, monospace',
             fontSize: '11px',
             lineHeight: '1.7',
             display: 'flex',
@@ -416,20 +429,27 @@ export default function App() {
             gap: '2px'
           }}>
             {logs.length === 0 ? (
-              <span style={{ color: '#3f3f46' }}>// Awaiting execution pipeline...</span>
+              <span style={{ color: '#3f3f46' }}>// Awaiting target URL and launch signal...</span>
             ) : (
               logs.map((log, i) => {
-                const isError = log.status === 'error' || log.text.includes('Error') || log.text.includes('[error]');
+                const isError = log.status === 'error' || log.text.includes('[error]');
                 const isDone = log.status === 'complete' || log.text.includes('[bundle]');
-                const isApi = log.text.includes('[sniff]') || log.text.includes('API');
+                const isClone = log.text.includes('[clone]') || log.text.includes('[check]');
+                const isReport = log.text.includes('[report]') || log.text.includes('[detect]');
+                const isSniff = log.text.includes('[sniff]');
+                const isCrawl = log.text.includes('[crawl]');
+
+                let textColor = '#d4d4d8';
+                if (isError) textColor = '#f87171';
+                else if (isDone || isClone) textColor = '#4ade80';
+                else if (isReport) textColor = '#f59e0b';
+                else if (isSniff) textColor = '#fbbf24';
+                else if (isCrawl) textColor = '#38bdf8';
+
                 return (
                   <div key={i} style={{ display: 'flex', gap: '8px', wordBreak: 'break-all' }}>
                     <span style={{ color: '#52525b', flexShrink: 0 }}>{log.time}</span>
-                    <span style={{
-                      color: isError ? '#f87171' : (isDone ? '#4ade80' : (isApi ? '#fbbf24' : '#d4d4d8'))
-                    }}>
-                      {log.text}
-                    </span>
+                    <span style={{ color: textColor }}>{log.text}</span>
                   </div>
                 );
               })
@@ -439,7 +459,7 @@ export default function App() {
         </div>
       </aside>
 
-      {/* RIGHT: REALISTIC BROWSER FRAMEWORK */}
+      {/* RIGHT: REALISTIC BROWSER PREVIEW FRAMEWORK */}
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#09090b', padding: '16px' }}>
         
         {/* Browser Mockup Shell */}
@@ -508,7 +528,8 @@ export default function App() {
                   marginLeft: 'auto',
                   padding: '4px 8px',
                   borderRadius: '4px',
-                  background: 'rgba(255, 255, 255, 0.04)'
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  transition: 'background 0.15s ease'
                 }}
               >
                 <span>New Tab</span>
@@ -544,7 +565,7 @@ export default function App() {
                       color: isActive ? '#ffffff' : '#71717a',
                       border: 'none',
                       fontSize: '11px',
-                      fontFamily: '"Geist Mono", monospace',
+                      fontFamily: '"JetBrains Mono", monospace',
                       cursor: 'pointer',
                       whiteSpace: 'nowrap',
                       transition: 'all 0.15s ease'
@@ -561,8 +582,9 @@ export default function App() {
           <div style={{ flex: 1, position: 'relative', background: '#09090b' }}>
             {previewServerUrl ? (
               <iframe
-                title="Viewport"
+                title="Sandbox Viewport"
                 src={previewServerUrl}
+                sandbox="allow-scripts allow-same-origin allow-forms allow-modals"
                 style={{
                   width: '100%',
                   height: '100%',
@@ -593,10 +615,10 @@ export default function App() {
                   <GlobeIcon />
                 </div>
                 <p style={{ fontSize: '13px', color: '#71717a', fontWeight: '500' }}>
-                  No Active Session
+                  No Active Archival Session
                 </p>
-                <p style={{ fontSize: '11px', color: '#52525b', maxWidth: '280px', textAlign: 'center' }}>
-                  Enter a target URL and launch the crawler to inspect the sandboxed DOM.
+                <p style={{ fontSize: '11px', color: '#52525b', maxWidth: '320px', textAlign: 'center' }}>
+                  Enter any web address and launch the engine. Captured pages and APIs will render here in real time.
                 </p>
               </div>
             )}

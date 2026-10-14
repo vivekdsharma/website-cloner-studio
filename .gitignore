@@ -1,21 +1,27 @@
-# Dependencies
+# Node modules
 node_modules/
 */node_modules/
 
-# Production builds
-dist/
-build/
-*/dist/
+# Puppeteer browser cache
+.cache/
+*/.cache/
 
 # Environment files
 .env
 .env.local
+.env.*.local
 
-# Logs & temp files
-*.log
+# Logs
 npm-debug.log*
-developer-website-package.zip
+yarn-debug.log*
+yarn-error.log*
+*.log
 
-# OS Files
+# OS generated files
 .DS_Store
 Thumbs.db
+
+# Vite & build output
+dist/
+dist-ssr/
+*.local
