@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: website-cloner-studio
+    env: node
+    plan: free
+    buildCommand: npm run build
+    startCommand: npm start
+    envVars:
+      - key: PUPPETEER_CACHE_DIR
+        value: /opt/render/.cache/puppeteer
+      - key: NODE_ENV
+        value: production

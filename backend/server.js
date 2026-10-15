@@ -6,6 +6,8 @@ const archiverPkg = require('archiver');
 const archiver = archiverPkg.default || archiverPkg;
 const { URL } = require('url');
 const cors = require('cors');
+const path = require('path');
+const fs = require('fs');
 require('dotenv').config();
 
 const app = express();
@@ -430,7 +432,8 @@ app.get('/api/clone-stream', async (req, res) => {
     sendSSE(res, { status: 'info', message: '[crawler] Launching Chromium Low-Memory Sandbox...' });
 
     browser = await puppeteer.launch({
-      headless: 'new',
+      headless: true,
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
       defaultViewport: { width: 1366, height: 768 },
       args: [
         '--no-sandbox',
@@ -837,6 +840,18 @@ npm start
 
   await archive.finalize();
 });
+
+// -------------------------------------------------------------
+// PRODUCTION STATIC FRONTEND SERVING
+// -------------------------------------------------------------
+const distPath = path.join(__dirname, '../frontend/dist');
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api/')) return next();
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
 
 const PORT = process.env.PORT || 5000;
 const server = app.listen(PORT, () => {

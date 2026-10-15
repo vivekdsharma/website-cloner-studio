@@ -83,3 +83,18 @@ The frontend dev server runs on `http://localhost:3000`.
 4. Observe real-time SSE telemetry in the Dev Console.
 5. Interact with the sandboxed preview or switch sub-page tabs.
 6. Click **Download Bundle (.zip)** to obtain the offline archive and mock server.
+
+---
+
+## Deployment (Render.com / Cloud)
+
+This repository is configured for single-service deployment on **Render**:
+- **Environment**: Node
+- **Build Command**: `npm run build` (or `./render-build.sh`)
+- **Start Command**: `npm start`
+- **Recommended Environment Variables**:
+  - `PUPPETEER_CACHE_DIR`: `/opt/render/.cache/puppeteer`
+  - `NODE_ENV`: `production`
+
+In production, the Express backend automatically serves the production React build from `frontend/dist` on the same port, handling both UI routing and scraping/crawler API endpoints seamlessly.
+

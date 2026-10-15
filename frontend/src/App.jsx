@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' && (window.location.port === '5173' || window.location.port === '3000') ? 'http://localhost:5000' : '');
 
 // Senior Developer Micro-Iconography
 const GlobeIcon = () => (
