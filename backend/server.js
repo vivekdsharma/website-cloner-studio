@@ -8,7 +8,11 @@ const { URL } = require('url');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-require('dotenv').config();
+try {
+  require('dotenv').config();
+} catch (e) {
+  // dotenv optional when environment variables are injected directly
+}
 
 const app = express();
 app.use(cors());

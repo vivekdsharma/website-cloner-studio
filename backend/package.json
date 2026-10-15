@@ -4,7 +4,7 @@
   "description": "Universal Dual-Engine Web Archiver & Functional Cloner Backend",
   "main": "server.js",
   "scripts": {
-    "build": "npm install --prefix ../frontend && npm run build --prefix ../frontend && npx puppeteer browsers install chrome",
+    "build": "npm install && npm install --prefix ../frontend && npm run build --prefix ../frontend && npx puppeteer browsers install chrome",
     "start": "node server.js",
     "dev": "node --watch server.js"
   },
